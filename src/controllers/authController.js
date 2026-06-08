@@ -47,8 +47,8 @@ const login = async (req, res) => {
             { expiresIn: '24h' }
         );
 
-        res.status(200).json({ 
-            message: 'Login correcto', 
+        res.status(200).json({
+            message: 'Login correcto',
             token,
             user: { id: user._id, email: user.email }
         });
@@ -57,4 +57,26 @@ const login = async (req, res) => {
     }
 };
 
-module.exports = { register, login };
+// ✅ Función getProfile - AHORA ESTÁ FUERA del login
+const getProfile = async (req, res) => {
+    try {
+        // El middleware ya verificó el token y puso los datos en req.user
+        // req.user tiene: { id: user._id, email: user.email }
+
+        // Buscar usuario en la base de datos (excluyendo la contraseña)
+        const user = await User.findById(req.user.id).select('-password');
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Devolver el email del usuario
+        res.json({ user: { email: user.email } });
+
+    } catch (error) {
+        res.status(500).json({ message: 'Error getting profile', error: error.message });
+    }
+};
+
+// Exportar correctamente las tres funciones
+module.exports = { register, login, getProfile };
