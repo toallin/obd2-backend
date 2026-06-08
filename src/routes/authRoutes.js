@@ -54,11 +54,12 @@
  *       401:
  *         description: Credenciales incorrectas
  */
-
 const router = require('express').Router();
-const { login, register } = require('../controllers/authController');
+const { login, register, getProfile } = require('../controllers/authController'); // ← Agrega getProfile
+const authMiddleware = require('../middlewares/auth');
 
 router.post('/register', register);
 router.post('/login', login);
+router.get('/profile', authMiddleware, getProfile); // ← Usa getProfile del controlador
 
 module.exports = router;
