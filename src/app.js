@@ -44,5 +44,6 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/vehicledata', vehicleDataRoutes);
 app.use('/api/obd2', obd2Routes);
 app.use('/api/trips', require('./routes/tripRoutes'));
+app.use('/api/repairs', require('./routes/repairRoutes'));
 
 module.exports = app;
