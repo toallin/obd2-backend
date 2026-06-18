@@ -21,6 +21,15 @@ app.use(cors({
 
 app.use(express.json());
 
+// ✅ AGREGAR ESTO PARA DEPURAR
+app.use((req, res, next) => {
+    console.log('📥 Método:', req.method);
+    console.log('📥 URL:', req.url);
+    console.log('📥 Headers:', req.headers);
+    console.log('📥 Body recibido:', req.body);
+    next();
+});
+
 // archivos estáticos
 app.use('/uploads', express.static('uploads'));
 
