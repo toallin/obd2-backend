@@ -130,7 +130,8 @@ const setup2FA = async (req, res) => {
         const otpauthUrl = speakeasy.otpauthURL({
             secret: secret.base32,
             label: email,
-            issuer: 'OBD2-System'
+            issuer: 'OBD2-System',
+            encoding: 'base32'
         });
 
         console.log('📱 URL OTP generada');
