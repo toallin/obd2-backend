@@ -8,7 +8,15 @@ const userSchema = new mongoose.Schema({
     password: {
         type: String,
         required: true
+    },
+    totpSecret: {
+        type: String,
+        default: null
+    },
+    totpEnabled: {
+        type: Boolean,
+        default: false
     }
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model('User', userSchema);

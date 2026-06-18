@@ -1,46 +1,56 @@
 const authService = require('../services/authService');
-const User = require('../models/User'); // Asume que tienes este modelo
+const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const { authenticator } = require('otplib');
+const QRCode = require('qrcode');
 
+const APP_NAME = 'OBD-II System';
+
+// ──────────────────────────────────────────────────────
+// REGISTER
+// ──────────────────────────────────────────────────────
 const register = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Verificar si el usuario ya existe
         const userExists = await User.findOne({ email });
         if (userExists) {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        // Crear nuevo usuario
-        const user = new User({
-            email,
-            password
-        });
-
+        const user = new User({ email, password });
         await user.save();
+
         res.status(201).json({ message: 'User registered successfully', user });
     } catch (error) {
         res.status(500).json({ message: 'Error registering user', error: error.message });
     }
 };
 
+// ──────────────────────────────────────────────────────
+// LOGIN — Paso 1: verificar email + contraseña
+// Si el usuario tiene 2FA activo → responde { requires2FA: true }
+// Si no tiene 2FA → devuelve el JWT directamente
+// ──────────────────────────────────────────────────────
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Buscar usuario
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(401).json({ message: 'Credenciales incorrectas' });
         }
 
-        // Verificar contraseña
         if (user.password !== password) {
             return res.status(401).json({ message: 'Credenciales incorrectas' });
         }
 
-        // Generar token JWT
+        // Si tiene 2FA activado → no emitir JWT todavía
+        if (user.totpEnabled) {
+            return res.status(200).json({ requires2FA: true });
+        }
+
+        // Sin 2FA → login normal
         const token = jwt.sign(
             { id: user._id, email: user.email },
             process.env.JWT_SECRET,
@@ -57,26 +67,121 @@ const login = async (req, res) => {
     }
 };
 
-// ✅ Función getProfile - AHORA ESTÁ FUERA del login
+// ──────────────────────────────────────────────────────
+// GET PROFILE
+// ──────────────────────────────────────────────────────
 const getProfile = async (req, res) => {
     try {
-        // El middleware ya verificó el token y puso los datos en req.user
-        // req.user tiene: { id: user._id, email: user.email }
-
-        // Buscar usuario en la base de datos (excluyendo la contraseña)
         const user = await User.findById(req.user.id).select('-password');
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Devolver el email del usuario
         res.json({ user: { email: user.email } });
-
     } catch (error) {
         res.status(500).json({ message: 'Error getting profile', error: error.message });
     }
 };
 
-// Exportar correctamente las tres funciones
-module.exports = { register, login, getProfile };
+// ──────────────────────────────────────────────────────
+// 2FA SETUP — Genera secreto + QR para que el usuario escanee
+// POST /api/auth/2fa/setup  { email }
+// ──────────────────────────────────────────────────────
+const setup2FA = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        // Generar secreto único para este usuario
+        const secret = authenticator.generateSecret();
+
+        // Guardar en la BD (aún no activado)
+        user.totpSecret  = secret;
+        user.totpEnabled = false;
+        await user.save();
+
+        // URL estándar que leen las apps autenticadoras
+        const otpauthUrl = authenticator.keyuri(email, APP_NAME, secret);
+
+        // Convertir el URL en imagen QR (base64 data URL)
+        const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+        res.status(200).json({ qrCode, secret });
+    } catch (error) {
+        res.status(500).json({ message: 'Error generando 2FA', error: error.message });
+    }
+};
+
+// ──────────────────────────────────────────────────────
+// 2FA VERIFY SETUP — Usuario ingresa su primer código para confirmar
+// POST /api/auth/2fa/verify-setup  { email, token }
+// Si es correcto → activa totpEnabled = true
+// ──────────────────────────────────────────────────────
+const verifySetup2FA = async (req, res) => {
+    try {
+        const { email, token } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user || !user.totpSecret) {
+            return res.status(400).json({ message: 'Configura el 2FA primero' });
+        }
+
+        const isValid = authenticator.verify({ token, secret: user.totpSecret });
+
+        if (!isValid) {
+            return res.status(401).json({ message: 'Código incorrecto' });
+        }
+
+        // Activar 2FA oficialmente
+        user.totpEnabled = true;
+        await user.save();
+
+        res.status(200).json({ message: '2FA activado correctamente' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error verificando 2FA', error: error.message });
+    }
+};
+
+// ──────────────────────────────────────────────────────
+// 2FA LOGIN — Paso 2 del login: verificar código TOTP
+// POST /api/auth/2fa/login  { email, token }
+// Si es correcto → emite el JWT definitivo
+// ──────────────────────────────────────────────────────
+const login2FA = async (req, res) => {
+    try {
+        const { email, token } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user || !user.totpEnabled) {
+            return res.status(400).json({ message: 'Usuario o 2FA no válido' });
+        }
+
+        const isValid = authenticator.verify({ token, secret: user.totpSecret });
+
+        if (!isValid) {
+            return res.status(401).json({ message: 'Código incorrecto o expirado' });
+        }
+
+        // Código correcto → emitir JWT
+        const jwtToken = jwt.sign(
+            { id: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.status(200).json({
+            message: 'Login correcto',
+            token: jwtToken,
+            user: { id: user._id, email: user.email }
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error en 2FA login', error: error.message });
+    }
+};
+
+module.exports = { register, login, getProfile, setup2FA, verifySetup2FA, login2FA };
