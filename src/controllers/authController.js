@@ -13,6 +13,10 @@ const register = async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        if (!email || !password) {
+            return res.status(400).json({ message: 'El email y la contraseña son requeridos' });
+        }
+
         const userExists = await User.findOne({ email });
         if (userExists) {
             return res.status(400).json({ message: 'User already exists' });
@@ -29,12 +33,14 @@ const register = async (req, res) => {
 
 // ──────────────────────────────────────────────────────
 // LOGIN — Paso 1: verificar email + contraseña
-// Si el usuario tiene 2FA activo → responde { requires2FA: true }
-// Si no tiene 2FA → devuelve el JWT directamente
 // ──────────────────────────────────────────────────────
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email y contraseña requeridos' });
+        }
 
         const user = await User.findOne({ email });
         if (!user) {
@@ -86,11 +92,14 @@ const getProfile = async (req, res) => {
 
 // ──────────────────────────────────────────────────────
 // 2FA SETUP — Genera secreto + QR para que el usuario escanee
-// POST /api/auth/2fa/setup  { email }
 // ──────────────────────────────────────────────────────
 const setup2FA = async (req, res) => {
     try {
         const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: 'El correo electrónico es requerido para configurar el 2FA' });
+        }
 
         const user = await User.findOne({ email });
         if (!user) {
@@ -101,8 +110,10 @@ const setup2FA = async (req, res) => {
         const secret = authenticator.generateSecret();
 
         // Guardar en la BD (aún no activado)
-        user.totpSecret  = secret;
+        user.totpSecret = secret;
         user.totpEnabled = false;
+
+        // El guardado puede fallar si el esquema de la BD exige otros datos
         await user.save();
 
         // URL estándar que leen las apps autenticadoras
@@ -113,18 +124,24 @@ const setup2FA = async (req, res) => {
 
         res.status(200).json({ qrCode, secret });
     } catch (error) {
-        res.status(500).json({ message: 'Error generando 2FA', error: error.message });
+        // Exponemos el mensaje detallado de Mongoose/MongoDB por si hay un fallo de validación
+        res.status(500).json({
+            message: 'Error generando 2FA en el servidor',
+            error: error.message
+        });
     }
 };
 
 // ──────────────────────────────────────────────────────
-// 2FA VERIFY SETUP — Usuario ingresa su primer código para confirmar
-// POST /api/auth/2fa/verify-setup  { email, token }
-// Si es correcto → activa totpEnabled = true
+// 2FA VERIFY SETUP — Confirmar primer código
 // ──────────────────────────────────────────────────────
 const verifySetup2FA = async (req, res) => {
     try {
         const { email, token } = req.body;
+
+        if (!email || !token) {
+            return res.status(400).json({ message: 'Email y token son requeridos' });
+        }
 
         const user = await User.findOne({ email });
         if (!user || !user.totpSecret) {
@@ -149,12 +166,14 @@ const verifySetup2FA = async (req, res) => {
 
 // ──────────────────────────────────────────────────────
 // 2FA LOGIN — Paso 2 del login: verificar código TOTP
-// POST /api/auth/2fa/login  { email, token }
-// Si es correcto → emite el JWT definitivo
 // ──────────────────────────────────────────────────────
 const login2FA = async (req, res) => {
     try {
         const { email, token } = req.body;
+
+        if (!email || !token) {
+            return res.status(400).json({ message: 'Email y token son requeridos' });
+        }
 
         const user = await User.findOne({ email });
         if (!user || !user.totpEnabled) {
@@ -167,7 +186,7 @@ const login2FA = async (req, res) => {
             return res.status(401).json({ message: 'Código incorrecto o expirado' });
         }
 
-        // Código correcto → emitir JWT
+        // Código correcto → emitir JWT definitivo
         const jwtToken = jwt.sign(
             { id: user._id, email: user.email },
             process.env.JWT_SECRET,
@@ -184,4 +203,11 @@ const login2FA = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile, setup2FA, verifySetup2FA, login2FA };
+module.exports = {
+    register,
+    login,
+    getProfile,
+    setup2FA,
+    verifySetup2FA,
+    login2FA
+};
