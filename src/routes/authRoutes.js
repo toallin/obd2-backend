@@ -56,13 +56,13 @@
  */
 const router = require('express').Router();
 
-// 💡 SOLUCIÓN: Agregamos setup2FA, verify2FASetup y login2FA a la desestructuración
+// 💡 CORRECCIÓN: Usamos exactamente "verifySetup2FA" que viene de tu controlador
 const {
     login,
     register,
     getProfile,
     setup2FA,
-    verify2FASetup,
+    verifySetup2FA, // ← Cambiado aquí
     login2FA
 } = require('../controllers/authController');
 
@@ -75,7 +75,7 @@ router.get('/profile', authMiddleware, getProfile);
 
 // Rutas de doble factor (2FA)
 router.post('/2fa/setup', setup2FA);
-router.post('/2fa/verify-setup', verify2FASetup);
+router.post('/2fa/verify-setup', verifySetup2FA); // ← Cambiado aquí también
 router.post('/2fa/login', login2FA);
 
 module.exports = router;
