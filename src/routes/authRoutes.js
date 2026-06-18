@@ -61,5 +61,7 @@ const authMiddleware = require('../middlewares/auth');
 router.post('/register', register);
 router.post('/login', login);
 router.get('/profile', authMiddleware, getProfile); // ← Usa getProfile del controlador
-
+router.post('/2fa/setup', setup2FA);
+router.post('/2fa/verify-setup', verify2FASetup);
+router.post('/2fa/login', login2FA);
 module.exports = router;
