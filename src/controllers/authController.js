@@ -112,29 +112,24 @@ const setup2FA = async (req, res) => {
             });
         }
 
-        // ✅ Generar secreto con speakeasy
+        // ✅ Generar secreto — issuer incluido para que genere otpauth_url correctamente
         const secret = speakeasy.generateSecret({
             length: 20,
-            name: `OBD2:${email}`
+            name: `OBD2-System:${email}`,
+            issuer: 'OBD2-System'
         });
 
         console.log('🔑 Secreto generado:', secret.base32);
 
-        // Guardar secreto
+        // Guardar secreto en base32
         user.totpSecret = secret.base32;
         user.totpEnabled = false;
         await user.save();
         console.log('💾 Secreto guardado en BD');
 
-        // Generar URL para QR
-        const otpauthUrl = speakeasy.otpauthURL({
-            secret: secret.base32,
-            label: email,
-            issuer: 'OBD2-System',
-            encoding: 'base32'
-        });
-
-        console.log('📱 URL OTP generada');
+        // ✅ Usar la URL que speakeasy genera internamente (encoding correcto garantizado)
+        const otpauthUrl = secret.otpauth_url;
+        console.log('📱 URL OTP generada:', otpauthUrl);
 
         // Generar QR
         const qrCode = await QRCode.toDataURL(otpauthUrl);
