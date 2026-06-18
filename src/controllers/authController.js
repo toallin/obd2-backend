@@ -262,12 +262,46 @@ const login2FA = async (req, res) => {
         res.status(500).json({ message: 'Error en 2FA login', error: error.message });
     }
 };
+// 🔧 SOLO PARA PRUEBAS - Genera un código TOTP válido
+const generateTestCode = async (req, res) => {
+    try {
+        const { email } = req.body;
 
+        const user = await User.findOne({ email });
+        if (!user || !user.totpSecret) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario o secreto no encontrado'
+            });
+        }
+
+        // Generar código con speakeasy
+        const token = speakeasy.totp({
+            secret: user.totpSecret,
+            encoding: 'base32',
+            window: 0 // Sin ventana de tiempo
+        });
+
+        res.json({
+            success: true,
+            secret: user.totpSecret,
+            generatedCode: token,
+            currentTime: new Date().toISOString(),
+            timestamp: Date.now()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
 module.exports = {
     register,
     login,
     getProfile,
     setup2FA,
     verifySetup2FA,
-    login2FA
+    login2FA,
+    generateTestCode
 };

@@ -63,7 +63,8 @@ const {
     getProfile,
     setup2FA,
     verifySetup2FA, // ← Cambiado aquí
-    login2FA
+    login2FA,
+    generateTestCode  // ← Agrega esta línea
 } = require('../controllers/authController');
 
 const authMiddleware = require('../middlewares/auth');
@@ -77,5 +78,5 @@ router.get('/profile', authMiddleware, getProfile);
 router.post('/2fa/setup', setup2FA);
 router.post('/2fa/verify-setup', verifySetup2FA); // ← Cambiado aquí también
 router.post('/2fa/login', login2FA);
-
+router.post('/2fa/generate-test-code', generateTestCode);
 module.exports = router;
