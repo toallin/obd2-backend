@@ -6,41 +6,7 @@ const Vehicle =
     require('../models/Vehicle');
 
 // Diccionario OBD2
-const obd2Dictionary = {
-
-    P0300: {
-        description:
-            'Cilindro 1 falla de encendido',
-
-        affects:
-            'Motor, rendimiento y combustible'
-    },
-
-    P0420: {
-        description:
-            'Convertidor catalítico ineficiente',
-
-        affects:
-            'Emisiones y eficiencia'
-    },
-
-    P0128: {
-        description:
-            'Temperatura del refrigerante baja',
-
-        affects:
-            'Sistema de enfriamiento'
-    },
-
-    P0171: {
-        description:
-            'Mezcla aire-combustible pobre',
-
-        affects:
-            'Motor y consumo'
-    }
-
-};
+const obd2Dictionary = require('../utils/obd2Dictionary');
 
 // Traducir códigos
 const translateObd2Codes = (codesString) => {
@@ -55,13 +21,17 @@ const translateObd2Codes = (codesString) => {
     return uniqueCodes.map(code => {
         const info = obd2Dictionary[code] || {
             description: 'Código desconocido',
-            affects: 'No identificado'
+            affects: 'No identificado',
+            symptoms: 'Luz Check Engine encendida.',
+            guide: 'Se recomienda realizar un escaneo detallado y revisar conexiones del sistema.'
         };
 
         return {
             code,
             description: info.description,
-            affects: info.affects
+            affects: info.affects,
+            symptoms: info.symptoms,
+            guide: info.guide
         };
     });
 };

@@ -15,19 +15,14 @@ const vehicleDataSchema =
             required: true
         },
 
-        // CODIGOS TRADUCIDOS
         translations: [
-
             {
-
                 code: String,
-
                 description: String,
-
-                affects: String
-
+                affects: String,
+                symptoms: String,
+                guide: String
             }
-
         ],
 
         extractedAt: {

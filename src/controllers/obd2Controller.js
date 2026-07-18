@@ -16,9 +16,10 @@ const uploadCodes = async (req, res) => {
 
         for (const code of codes) {
 
-            const description =
-                dictionary[code] ||
-                'Código desconocido';
+            const info = dictionary[code];
+            const description = info
+                ? (typeof info === 'object' ? info.description : info)
+                : 'Código desconocido';
 
             const saved =
                 await OBD2Code.create({
