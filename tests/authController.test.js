@@ -4,6 +4,7 @@ jest.mock('jsonwebtoken', () => ({
 }));
 jest.mock('speakeasy', () => ({
     generateSecret: jest.fn(),
+    otpauthURL: jest.fn(),
     totp: { verify: jest.fn() }
 }));
 jest.mock('qrcode', () => ({
@@ -116,7 +117,7 @@ describe('authController.register', () => {
         test('genera y guarda el secreto 2FA y devuelve el código QR', async () => {
             const user = {
                 save: jest.fn().mockResolvedValue(undefined),
-                totpEnabled: true
+                totpEnabled: false
             };
             User.findOne = jest.fn().mockResolvedValue(user);
             speakeasy.generateSecret.mockReturnValue({
@@ -143,6 +144,57 @@ describe('authController.register', () => {
                 success: true,
                 qrCode: 'data:image/png;base64,prueba',
                 secret: 'SECRETO-DE-PRUEBA'
+            });
+        });
+
+        test('reutiliza el secreto pendiente al volver a solicitar el QR', async () => {
+            const user = {
+                totpSecret: 'SECRETO-DE-PRUEBA',
+                totpEnabled: false,
+                save: jest.fn()
+            };
+            User.findOne = jest.fn().mockResolvedValue(user);
+            speakeasy.otpauthURL.mockReturnValue('otpauth://totp/prueba');
+            QRCode.toDataURL.mockResolvedValue('data:image/png;base64,prueba');
+            const req = { body: { email: 'ana@example.com' } };
+            const res = createResponse();
+
+            await setup2FA(req, res);
+
+            expect(speakeasy.generateSecret).not.toHaveBeenCalled();
+            expect(speakeasy.otpauthURL).toHaveBeenCalledWith({
+                secret: 'SECRETO-DE-PRUEBA',
+                encoding: 'base32',
+                label: 'OBD2-System:ana@example.com',
+                issuer: 'OBD2-System'
+            });
+            expect(user.save).not.toHaveBeenCalled();
+            expect(res.json).toHaveBeenCalledWith({
+                success: true,
+                qrCode: 'data:image/png;base64,prueba',
+                secret: 'SECRETO-DE-PRUEBA'
+            });
+        });
+
+        test('no reemplaza el secreto de una cuenta con 2FA activo', async () => {
+            const user = {
+                totpSecret: 'SECRETO-ACTIVO',
+                totpEnabled: true,
+                save: jest.fn()
+            };
+            User.findOne = jest.fn().mockResolvedValue(user);
+            const req = { body: { email: 'ana@example.com' } };
+            const res = createResponse();
+
+            await setup2FA(req, res);
+
+            expect(speakeasy.generateSecret).not.toHaveBeenCalled();
+            expect(user.totpSecret).toBe('SECRETO-ACTIVO');
+            expect(user.save).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({
+                success: false,
+                message: 'El 2FA ya está activado'
             });
         });
     });
