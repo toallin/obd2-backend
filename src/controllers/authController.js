@@ -1,5 +1,4 @@
 const User = require('../models/User');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
@@ -19,16 +18,15 @@ const register = async (req, res) => {
 
         const userExists = await User.findOne({ email });
         if (userExists) {
-            return res.status(400).json({ message: 'El usuario ya existe' });
+            return res.status(400).json({ message: 'User already exists' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({ email, password: hashedPassword });
+        const user = new User({ email, password });
         await user.save();
 
-        res.status(201).json({ message: 'Usuario registrado exitosamente' });
+        res.status(201).json({ message: 'User registered successfully', user });
     } catch (error) {
-        res.status(500).json({ message: 'Error al registrar usuario', error: error.message });
+        res.status(500).json({ message: 'Error registering user', error: error.message });
     }
 };
 
@@ -48,8 +46,7 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Credenciales incorrectas' });
         }
 
-        const passwordIsValid = await bcrypt.compare(password, user.password);
-        if (!passwordIsValid) {
+        if (user.password !== password) {
             return res.status(401).json({ message: 'Credenciales incorrectas' });
         }
 
@@ -115,33 +112,24 @@ const setup2FA = async (req, res) => {
             });
         }
 
-        if (user.totpEnabled) {
-            return res.status(409).json({
-                success: false,
-                message: 'El 2FA ya está activado'
-            });
-        }
+        // ✅ Generar secreto — issuer incluido para que genere otpauth_url correctamente
+        const secret = speakeasy.generateSecret({
+            length: 20,
+            name: `OBD2-System:${email}`,
+            issuer: 'OBD2-System'
+        });
 
-        let otpauthUrl;
-        if (user.totpSecret && !user.totpEnabled) {
-            otpauthUrl = speakeasy.otpauthURL({
-                secret: user.totpSecret,
-                encoding: 'base32',
-                label: `OBD2-System:${email}`,
-                issuer: 'OBD2-System'
-            });
-        } else {
-            const secret = speakeasy.generateSecret({
-                length: 20,
-                name: `OBD2-System:${email}`,
-                issuer: 'OBD2-System'
-            });
+        console.log('🔑 Secreto generado:', secret.base32);
 
-            user.totpSecret = secret.base32;
-            user.totpEnabled = false;
-            await user.save();
-            otpauthUrl = secret.otpauth_url;
-        }
+        // Guardar secreto en base32
+        user.totpSecret = secret.base32;
+        user.totpEnabled = false;
+        await user.save();
+        console.log('💾 Secreto guardado en BD');
+
+        // ✅ Usar la URL que speakeasy genera internamente (encoding correcto garantizado)
+        const otpauthUrl = secret.otpauth_url;
+        console.log('📱 URL OTP generada:', otpauthUrl);
 
         // Generar QR
         const qrCode = await QRCode.toDataURL(otpauthUrl);
@@ -150,7 +138,7 @@ const setup2FA = async (req, res) => {
         res.status(200).json({
             success: true,
             qrCode: qrCode,
-            secret: user.totpSecret
+            secret: secret.base32
         });
 
     } catch (error) {
