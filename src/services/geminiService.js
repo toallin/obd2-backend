@@ -82,57 +82,52 @@ IMPORTANTE: Responde estrictamente en español.
     required: ["safeToTravel", "riskLevel", "estimatedTripTime", "codeAnalysis", "warnings", "recommendations", "futureFailurePrediction", "tripAdvice"]
   };
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }]
-            }
-          ],
-          // 🔥 AQUÍ CONFIGURAMOS EL MODO JSON ESTRICTO
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: jsonSchema
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }]
           }
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error('Gemini API error: ' + err);
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: jsonSchema
+        }
+      })
     }
+  );
 
-    const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!response.ok) {
+    const errorDetails = await response.text();
+    throw new Error(`Gemini API respondió HTTP ${response.status}: ${errorDetails}`);
+  }
 
-    // Ya viene como JSON puro de forma garantizada, directo al parse
+  const data = await response.json();
+  const candidate = data.candidates?.[0];
+  const rawText = candidate?.content?.parts
+    ?.find(part => typeof part.text === 'string')
+    ?.text;
+
+  if (!rawText?.trim()) {
+    const reason = candidate?.finishReason || data.promptFeedback?.blockReason;
+    throw new Error(
+      reason
+        ? `Gemini no devolvió contenido. Motivo: ${reason}`
+        : 'Gemini no devolvió contenido para el análisis'
+    );
+  }
+
+  try {
     return JSON.parse(rawText.trim());
-
-  } catch (e) {
-    console.error('❌ ERROR PROCESANDO DIAGNÓSTICO:', e);
-
-    return {
-      safeToTravel: false,
-      riskLevel: "Medium",
-      estimatedTripTime: "N/A",
-      codeAnalysis: [],
-      warnings: ["Error al procesar respuesta de IA"],
-      recommendations: ["Reintentar análisis"],
-      futureFailurePrediction: [],
-      tripAdvice: {
-        canTravel: "UNKNOWN",
-        explanation: "No se pudo analizar correctamente debido a un fallo en el formateo."
-      }
-    };
+  } catch (error) {
+    throw new Error(`Gemini devolvió JSON inválido: ${error.message}`);
   }
 }
 

@@ -6,7 +6,7 @@ const geminiService = require('../services/geminiService');
 // CREATE TRIP
 const createTrip = async (req, res) => {
   try {
-    const { vehicleId, origin, destination } = req.body;
+    const { vehicleId, origin, destination, distanceKm, durationMin } = req.body;
     const userId = req.user?.id || req.user?._id;
 
     const vehicle = await Vehicle.findOne({
@@ -15,7 +15,7 @@ const createTrip = async (req, res) => {
     });
 
     if (!vehicle) {
-      return res.status(404).json({ message: 'Vehicle not found' });
+      return res.status(404).json({ message: 'Vehículo no encontrado' });
     }
 
     const latestData = await VehicleData.findOne({ vehicle: vehicleId })
@@ -37,10 +37,9 @@ const createTrip = async (req, res) => {
       translations,
     });
 
-    if (!aiResult || aiResult.rawResponse) {
+    if (!aiResult) {
       return res.status(500).json({
-        message: 'AI analysis failed',
-        debug: aiResult,
+        message: 'El análisis de IA no retornó resultado',
       });
     }
 
@@ -49,22 +48,29 @@ const createTrip = async (req, res) => {
       vehicle: vehicleId,
       origin,
       destination,
-      distanceKm: Number(aiResult.distance) || 0,
-      durationMin: 0,
+      distanceKm: Number(distanceKm) || 0,
+      durationMin: Number(durationMin) || 0,
+      obdCodes,
+      obdTranslations: translations,
       aiAnalysis: {
         safeToTravel: aiResult.safeToTravel,
         riskLevel: aiResult.riskLevel,
+        estimatedTripTime: aiResult.estimatedTripTime || '',
+        codeAnalysis: aiResult.codeAnalysis || [],
         warnings: aiResult.warnings || [],
         recommendations: aiResult.recommendations || [],
+        futureFailurePrediction: aiResult.futureFailurePrediction || [],
+        tripAdvice: aiResult.tripAdvice || {},
       },
     });
 
-    return res.status(201).json({ trip });
+    return res.status(201).json({ trip, aiResult });
   } catch (error) {
-    console.error(error);
+    console.error('Error en createTrip:', error);
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // GET TRIPS
 const getTrips = async (req, res) => {
